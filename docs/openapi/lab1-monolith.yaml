@@ -1,0 +1,633 @@
+openapi: 3.1.0
+info:
+  title: Online Banking System — Lab 1 Monolith API
+  version: 1.0.0
+  description: >
+    Shared REST API contract for Lab 1 (Cloud Modular Monolith).
+    Designed so Frontend (R2), DevOps (R3), and Backend (R1) can work in parallel.
+    Domain modules: Clients, Accounts, Transactions.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: System
+    description: Health and service status endpoints
+  - name: Auth
+    description: Registration and JWT authentication
+  - name: Clients
+    description: Client profile management
+  - name: Accounts
+    description: Bank accounts and balances
+  - name: Transactions
+    description: Transfers and operation history
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Service health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new banking client
+      operationId: registerClient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Client registered and JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate client or admin and obtain JWT
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /api/v1/clients/me:
+    get:
+      tags: [Clients]
+      summary: Get current authenticated client profile
+      operationId: getCurrentClient
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Client profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /api/v1/clients:
+    get:
+      tags: [Clients]
+      summary: List all clients (admin only)
+      operationId: listClients
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+  /api/v1/clients/{clientId}/status:
+    patch:
+      tags: [Clients]
+      summary: Update client status (admin only)
+      operationId: updateClientStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClientStatusRequest"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /api/v1/accounts:
+    get:
+      tags: [Accounts]
+      summary: List accounts of the authenticated client
+      operationId: listMyAccounts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Client accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+    post:
+      tags: [Accounts]
+      summary: Open a new bank account
+      operationId: openAccount
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenAccountRequest"
+      responses:
+        "201":
+          description: Account opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /api/v1/accounts/{accountId}:
+    get:
+      tags: [Accounts]
+      summary: Get account details by ID
+      operationId: getAccountById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /api/v1/accounts/{accountId}/close:
+    post:
+      tags: [Accounts]
+      summary: Close an account with zero balance
+      operationId: closeAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Account closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+
+  /api/v1/transactions/transfers:
+    post:
+      tags: [Transactions]
+      summary: Transfer funds between accounts in a single database transaction
+      operationId: createTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Optional client-generated key to prevent duplicate transfers
+          schema:
+            type: string
+            maxLength: 100
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransferRequest"
+      responses:
+        "201":
+          description: Transfer completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+
+  /api/v1/transactions:
+    get:
+      tags: [Transactions]
+      summary: List transaction history for authenticated client
+      operationId: listTransactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accountId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Paginated transaction history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionPageResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /api/v1/transactions/{transactionId}:
+    get:
+      tags: [Transactions]
+      summary: Get transaction details by ID
+      operationId: getTransactionById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Transaction details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    UnauthorizedError:
+      description: Missing or invalid JWT token
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    ForbiddenError:
+      description: Insufficient permissions or foreign account access
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    ConflictError:
+      description: Business rule conflict (duplicate email/taxId, insufficient funds, closed account)
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, timestampUtc]
+      properties:
+        status:
+          type: string
+          example: Healthy
+        service:
+          type: string
+          example: online-banking-monolith
+        timestampUtc:
+          type: string
+          format: date-time
+
+    RegisterRequest:
+      type: object
+      required: [fullName, email, phone, birthDate, taxId, password]
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 200
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          example: "+380671234567"
+        birthDate:
+          type: string
+          format: date
+        taxId:
+          type: string
+          minLength: 8
+          maxLength: 20
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      required: [accessToken, expiresInSeconds, clientId, role]
+      properties:
+        accessToken:
+          type: string
+        expiresInSeconds:
+          type: integer
+        clientId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [Client, Admin]
+
+    ClientResponse:
+      type: object
+      required: [id, fullName, email, phone, birthDate, taxId, role, status, createdAtUtc]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        birthDate:
+          type: string
+          format: date
+        taxId:
+          type: string
+        role:
+          type: string
+          enum: [Client, Admin]
+        status:
+          type: string
+          enum: [Active, Blocked]
+        createdAtUtc:
+          type: string
+          format: date-time
+
+    UpdateClientStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [Active, Blocked]
+        reason:
+          type: string
+          maxLength: 500
+
+    OpenAccountRequest:
+      type: object
+      properties:
+        currency:
+          type: string
+          enum: [UAH, USD, EUR]
+          default: UAH
+        initialDeposit:
+          type: number
+          format: decimal
+          minimum: 0
+          default: 0
+
+    AccountResponse:
+      type: object
+      required: [id, clientId, iban, currency, balance, blockedAmount, availableBalance, status, openedAtUtc]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+          format: uuid
+        iban:
+          type: string
+          example: UA213223130000026007233566001
+        currency:
+          type: string
+          enum: [UAH, USD, EUR]
+        balance:
+          type: number
+          format: decimal
+        blockedAmount:
+          type: number
+          format: decimal
+        availableBalance:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [Active, Frozen, Closed]
+        openedAtUtc:
+          type: string
+          format: date-time
+
+    CreateTransferRequest:
+      type: object
+      required: [fromAccountId, toIban, amount]
+      properties:
+        fromAccountId:
+          type: string
+          format: uuid
+        toIban:
+          type: string
+        amount:
+          type: number
+          format: decimal
+          exclusiveMinimum: 0
+        description:
+          type: string
+          maxLength: 250
+
+    TransactionResponse:
+      type: object
+      required: [id, fromAccountId, toAccountId, toIban, amount, currency, status, type, createdAtUtc]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fromAccountId:
+          type: string
+          format: uuid
+        toAccountId:
+          type: string
+          format: uuid
+        toIban:
+          type: string
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+          enum: [UAH, USD, EUR]
+        status:
+          type: string
+          enum: [Pending, Completed, Failed]
+        type:
+          type: string
+          enum: [InternalTransfer]
+        description:
+          type: string
+          nullable: true
+        idempotencyKey:
+          type: string
+          nullable: true
+        createdAtUtc:
+          type: string
+          format: date-time
+
+    TransactionPageResponse:
+      type: object
+      required: [items, page, pageSize, totalCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionResponse"
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalCount:
+          type: integer
+
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
