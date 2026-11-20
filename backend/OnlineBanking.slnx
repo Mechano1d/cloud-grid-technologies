@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Shared/OnlineBanking.Shared/OnlineBanking.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OnlineBanking.UnitTests/OnlineBanking.UnitTests.csproj" />
+  </Folder>
+</Solution>

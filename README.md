@@ -9,7 +9,7 @@ Core domain: **Clients + Accounts + Transfers**, extended with **Notifications**
 
 | Tag | Milestone | Architecture Scope |
 |---|---|---|
-| `lab1` | Lab 1 — Cloud Application | `.NET 10` Modular Monolith (Clients, Accounts, Transfers, JWT, PostgreSQL) + Web UI + Cloud deploy |
+| `lab1` | Lab 1 — Cloud Application | `.NET 10` Monolith (Clients, Accounts, Transfers, JWT, PostgreSQL) + Web UI + Cloud deploy |
 | `lab2` | Lab 2 — Containerized App | Multi-container Docker Compose (`gateway`, `app`, `postgres`, `rabbitmq`, `notification-worker`, `frontend`) |
 | `lab3` | Lab 3 — Monolith vs Microservices | Microservices (`client`, `account`, `transaction`, `notification` services) benchmarked against Monolith |
 | `lab4` | Lab 4 — Cloud Resource Management | Kubernetes + HPA, Prometheus + Grafana, GitHub Actions CI/CD, Terraform |
@@ -19,35 +19,34 @@ Core domain: **Clients + Accounts + Transfers**, extended with **Notifications**
 
 | Role | Scope | Key Directories |
 |---|---|---|
-| **R1 — Backend / Domain** | `.NET 10` API, domain logic, JWT auth, PostgreSQL migrations, monolith -> microservices | `src/Monolith/`, `src/Services/`, `src/BuildingBlocks/`, `tests/Unit/` |
-| **R2 — Frontend / QA / Load** | Web client, API integration tests, k6/Locust benchmarks | `src/Frontend/`, `tests/Integration/`, `tests/Load/` |
-| **R3 — DevOps / Cloud** | Cloud DB & hosting, Dockerfiles, Compose, K8s/HPA, Terraform, CI/CD | `deploy/docker/`, `deploy/k8s/`, `deploy/terraform/`, `.github/workflows/` |
-| **R4 — Integration / Observability / PM** | RabbitMQ, API Gateway, Prometheus/Grafana, OpenAPI, reports & presentation | `src/Gateway/`, `deploy/monitoring/`, `docs/` |
+| **R1 — Backend / Domain** | `.NET 10` API, domain logic, JWT auth, PostgreSQL migrations, monolith -> microservices | `backend/` |
+| **R2 — Frontend / QA / Load** | Web client, API integration tests, k6/Locust benchmarks | `frontend/`, `load-tests/` |
+| **R3 — DevOps / Cloud** | Cloud DB & hosting, Dockerfiles, Compose, K8s/HPA, Terraform, CI/CD | `infra/`, `.github/workflows/` |
+| **R4 — Integration / Observability / PM** | RabbitMQ, API Gateway, Prometheus/Grafana, OpenAPI, reports & presentation | `gateway/`, `infra/monitoring/`, `docs/` |
 
 ## Repository Structure
 
 ```text
 .
 ├── .github/                  # CI/CD workflows and PR template
+├── backend/                  # R1: .NET 10 backend ecosystem
+│   ├── OnlineBanking.slnx    # Solution file
+│   ├── Directory.Build.props # Shared compiler & analyzer settings
+│   ├── Directory.Packages.props # Centralized NuGet versions
+│   ├── src/
+│   │   ├── Shared/           # Pure shared contracts, Result, event DTOs (no ASP.NET)
+│   │   ├── Monolith/         # Lab 1–3 monolith API (Modules: Clients, Accounts, Transactions)
+│   │   └── Services/         # Lab 2+ workers & Lab 3+ microservices
+│   └── tests/                # Backend unit & integration tests
+├── frontend/                 # R2: Web UI client
+├── load-tests/               # R2: k6 / Locust benchmark scripts & results
+├── gateway/                  # R4: nginx / API Gateway configuration (Lab 2+)
+├── infra/                    # R3 + R4: docker, k8s, terraform, monitoring
 ├── docs/
 │   ├── openapi/              # Shared API contracts (start here for parallel work)
 │   ├── architecture/         # Diagrams & ADRs
 │   ├── reports/              # Team lab reports
 │   └── ai-logs/              # Transparent AI usage logs per role
-├── src/
-│   ├── BuildingBlocks/       # Shared contracts, error handling, observability
-│   ├── Monolith/             # .NET 10 Modular Monolith (Labs 1–3)
-│   ├── Services/             # Microservices & workers (Labs 2–4, Project)
-│   ├── Gateway/              # API Gateway / nginx config (Lab 2+)
-│   └── Frontend/             # Web UI client
-├── tests/
-│   ├── Unit/                 # .NET unit tests
-│   ├── Integration/          # API & DB integration tests
-│   └── Load/                 # k6 / Locust benchmark scripts & results
-├── deploy/                   # Docker, Kubernetes, Terraform, Monitoring configs
-├── OnlineBanking.slnx        # .NET 10 solution
-├── Directory.Build.props     # Shared MSBuild compiler & analyzer settings
-├── Directory.Packages.props  # Centralized NuGet package versions
 └── .env.example              # Environment variable contract
 ```
 
@@ -63,11 +62,9 @@ Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/) and PostgreSQL (for 
 
 ```bash
 cp .env.example .env
-dotnet restore OnlineBanking.slnx
-dotnet build OnlineBanking.slnx
-dotnet test OnlineBanking.slnx
-dotnet run --project src/Monolith/OnlineBanking.Monolith.Api
+dotnet restore backend/OnlineBanking.slnx
+dotnet build backend/OnlineBanking.slnx
+dotnet test backend/OnlineBanking.slnx
 ```
 
-- Health check: `GET http://localhost:8080/health`
-- API contract: `docs/openapi/lab1-monolith.yaml`
+- Shared Lab 1 API contract: `docs/openapi/lab1-monolith.yaml`
