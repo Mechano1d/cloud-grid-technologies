@@ -5,7 +5,7 @@ using OnlineBanking.Shared.Time;
 
 namespace OnlineBanking.Persistence.Seeding;
 
-public static class DatabaseSeeder
+public static class DevDataSeeder
 {
     public static readonly Guid AdminClientId = Guid.Parse("11111111-1111-1111-1111-111111111101");
     public static readonly Guid AliceClientId = Guid.Parse("11111111-1111-1111-1111-111111111102");

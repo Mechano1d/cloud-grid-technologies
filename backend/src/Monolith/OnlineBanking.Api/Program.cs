@@ -95,17 +95,34 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+var applyMigrations = app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup");
+var seedDevData = app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Database:SeedOnStartup");
+var adminBootstrap = app.Configuration.GetSection(AdminBootstrapOptions.SectionName).Get<AdminBootstrapOptions>();
+var hasAdminBootstrap = adminBootstrap is not null &&
+    !string.IsNullOrWhiteSpace(adminBootstrap.Email) &&
+    !string.IsNullOrWhiteSpace(adminBootstrap.Password);
+
+if (applyMigrations || hasAdminBootstrap || seedDevData)
 {
     await using var scope = app.Services.CreateAsyncScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<OnlineBankingDbContext>();
-    await dbContext.Database.MigrateAsync();
 
-    if (app.Configuration.GetValue<bool>("Database:SeedOnStartup") && !app.Environment.IsProduction())
+    if (applyMigrations)
     {
-        var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasherService>();
-        var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
-        await DatabaseSeeder.SeedAsync(dbContext, passwordHasher.Hash, dateTimeProvider);
+        await dbContext.Database.MigrateAsync();
+    }
+
+    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasherService>();
+    var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
+
+    if (hasAdminBootstrap)
+    {
+        await AdminBootstrapper.BootstrapAsync(dbContext, adminBootstrap!, passwordHasher.Hash, dateTimeProvider);
+    }
+
+    if (seedDevData)
+    {
+        await DevDataSeeder.SeedAsync(dbContext, passwordHasher.Hash, dateTimeProvider);
     }
 }
 
