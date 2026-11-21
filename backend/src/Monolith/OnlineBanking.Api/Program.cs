@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using OnlineBanking.Infrastructure;
@@ -50,11 +51,21 @@ builder.Services.AddOpenApi(options =>
             Description = "JWT Bearer token"
         };
 
-        document.Security ??= [];
-        document.Security.Add(new OpenApiSecurityRequirement
+        return Task.CompletedTask;
+    });
+
+    options.AddOperationTransformer((operation, context, _) =>
+    {
+        var metadata = context.Description.ActionDescriptor.EndpointMetadata;
+        var requiresAuth = metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any();
+        if (requiresAuth)
         {
-            [new OpenApiSecuritySchemeReference("bearerAuth", document)] = []
-        });
+            operation.Security ??= [];
+            operation.Security.Add(new OpenApiSecurityRequirement
+            {
+                [new OpenApiSecuritySchemeReference("bearerAuth", context.Document)] = []
+            });
+        }
 
         return Task.CompletedTask;
     });
