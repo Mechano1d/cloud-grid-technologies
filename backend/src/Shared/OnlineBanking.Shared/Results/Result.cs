@@ -1,8 +1,33 @@
 namespace OnlineBanking.Shared.Results;
 
-public sealed record DomainError(string Code, string Message)
+public enum ErrorType
 {
-    public static readonly DomainError None = new(string.Empty, string.Empty);
+    None = 0,
+    Validation = 1,
+    Unauthorized = 2,
+    Forbidden = 3,
+    NotFound = 4,
+    Conflict = 5
+}
+
+public sealed record DomainError(string Code, string Message, ErrorType Type = ErrorType.Validation)
+{
+    public static readonly DomainError None = new(string.Empty, string.Empty, ErrorType.None);
+
+    public static DomainError Validation(string code, string message) =>
+        new(code, message, ErrorType.Validation);
+
+    public static DomainError Unauthorized(string code, string message) =>
+        new(code, message, ErrorType.Unauthorized);
+
+    public static DomainError Forbidden(string code, string message) =>
+        new(code, message, ErrorType.Forbidden);
+
+    public static DomainError NotFound(string code, string message) =>
+        new(code, message, ErrorType.NotFound);
+
+    public static DomainError Conflict(string code, string message) =>
+        new(code, message, ErrorType.Conflict);
 }
 
 public class Result
