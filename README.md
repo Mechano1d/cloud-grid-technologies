@@ -89,6 +89,7 @@ dotnet build backend/OnlineBanking.slnx -c Release
 dotnet test backend/OnlineBanking.slnx -c Release
 ```
 
+- Interactive API docs (Scalar UI in `Development`): `http://localhost:8080/scalar/v1` (raw spec: `http://localhost:8080/openapi/v1.json`)
 - Shared Lab 1 OpenAPI contract: `docs/openapi/lab1-monolith.yaml`
 - Backend Architecture ADR: `docs/architecture/001-backend-architecture.md`
 - Idempotent SQL DDL: `docs/database/initial-migrations.sql`
