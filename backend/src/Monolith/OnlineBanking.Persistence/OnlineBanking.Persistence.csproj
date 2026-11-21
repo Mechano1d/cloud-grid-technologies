@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\OnlineBanking.Shared\OnlineBanking.Shared.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Infrastructure\OnlineBanking.Infrastructure.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Module.Clients\OnlineBanking.Module.Clients.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Module.Accounts\OnlineBanking.Module.Accounts.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Module.Transactions\OnlineBanking.Module.Transactions.csproj" />
+  </ItemGroup>
+
+</Project>

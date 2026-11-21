@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NetArchTest.Rules" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Shared\OnlineBanking.Shared\OnlineBanking.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Monolith\OnlineBanking.Api\OnlineBanking.Api.csproj" />
+    <ProjectReference Include="..\..\src\Monolith\OnlineBanking.Infrastructure\OnlineBanking.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Monolith\OnlineBanking.Persistence\OnlineBanking.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Monolith\OnlineBanking.Module.Clients\OnlineBanking.Module.Clients.csproj" />
+    <ProjectReference Include="..\..\src\Monolith\OnlineBanking.Module.Accounts\OnlineBanking.Module.Accounts.csproj" />
+    <ProjectReference Include="..\..\src\Monolith\OnlineBanking.Module.Transactions\OnlineBanking.Module.Transactions.csproj" />
+  </ItemGroup>
+
+</Project>
