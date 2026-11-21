@@ -18,9 +18,7 @@ public sealed class TransactionsController(TransfersService transfersService) : 
         CancellationToken cancellationToken)
     {
         var result = await transfersService.CreateTransferAsync(request, idempotencyKey, cancellationToken);
-        return result.IsSuccess
-            ? result.ToCreatedResult(HttpContext, $"/api/v1/transactions/{result.Value.Id}")
-            : result.ToActionResult(HttpContext);
+        return result.ToCreatedResult(HttpContext, tx => $"/api/v1/transactions/{tx.Id}");
     }
 
     [HttpGet]

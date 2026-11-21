@@ -161,3 +161,35 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20261121095216_AddFailureMetadataAndClientIndex') THEN
+    ALTER TABLE transactions.transactions ADD failure_code character varying(100);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20261121095216_AddFailureMetadataAndClientIndex') THEN
+    ALTER TABLE transactions.transactions ADD failure_error_type character varying(32);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20261121095216_AddFailureMetadataAndClientIndex') THEN
+    CREATE INDEX ix_clients_created_at_utc ON clients.clients (created_at_utc);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20261121095216_AddFailureMetadataAndClientIndex') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261121095216_AddFailureMetadataAndClientIndex', '10.0.15');
+    END IF;
+END $EF$;
+COMMIT;
+

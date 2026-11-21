@@ -1,4 +1,5 @@
 using OnlineBanking.Shared.Results;
+using OnlineBanking.Shared.Validation;
 
 namespace OnlineBanking.Module.Accounts.Domain;
 
@@ -59,7 +60,7 @@ public sealed class Account
                 "A valid Ukrainian IBAN is required."));
         }
 
-        if (initialDeposit < 0m || decimal.Round(initialDeposit, 2) != initialDeposit)
+        if (!MoneyValidation.IsValidNonNegativeAmount(initialDeposit))
         {
             return Result.Failure<Account>(DomainError.Validation(
                 "Accounts.InvalidInitialDeposit",
@@ -86,7 +87,7 @@ public sealed class Account
                 "Source account must be active to debit funds."));
         }
 
-        if (amount <= 0m || decimal.Round(amount, 2) != amount)
+        if (!MoneyValidation.IsValidPositiveAmount(amount))
         {
             return Result.Failure(DomainError.Validation(
                 "Accounts.InvalidAmount",
@@ -113,7 +114,7 @@ public sealed class Account
                 "Destination account must be active to credit funds."));
         }
 
-        if (amount <= 0m || decimal.Round(amount, 2) != amount)
+        if (!MoneyValidation.IsValidPositiveAmount(amount))
         {
             return Result.Failure(DomainError.Validation(
                 "Accounts.InvalidAmount",

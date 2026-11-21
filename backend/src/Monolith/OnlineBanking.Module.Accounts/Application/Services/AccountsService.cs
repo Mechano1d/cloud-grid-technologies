@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OnlineBanking.Infrastructure.Auth;
 using OnlineBanking.Module.Accounts.Application.Abstractions;
 using OnlineBanking.Module.Accounts.Application.Dtos;
@@ -8,23 +9,24 @@ using OnlineBanking.Shared.Time;
 
 namespace OnlineBanking.Module.Accounts.Application.Services;
 
-public sealed class AccountsService(
+public sealed partial class AccountsService(
     IAccountRepository accountRepository,
     IClientsApi clientsApi,
     ICurrentUser currentUser,
-    IDateTimeProvider dateTimeProvider)
+    IDateTimeProvider dateTimeProvider,
+    ILogger<AccountsService> logger)
 {
     public async Task<Result<IReadOnlyList<AccountResponse>>> ListMyAccountsAsync(
         CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<IReadOnlyList<AccountResponse>>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
                 "Authentication is required."));
         }
 
-        var accounts = await accountRepository.ListByClientIdAsync(currentUser.ClientId.Value, cancellationToken);
+        var accounts = await accountRepository.ListByClientIdAsync(clientId, cancellationToken);
         IReadOnlyList<AccountResponse> response = accounts.Select(MapToResponse).ToList();
         return Result.Success(response);
     }
@@ -33,21 +35,24 @@ public sealed class AccountsService(
         OpenAccountRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<AccountResponse>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
                 "Authentication is required."));
         }
 
-        if (!await clientsApi.IsActiveClientAsync(currentUser.ClientId.Value, cancellationToken))
+        if (!await clientsApi.IsActiveClientAsync(clientId, cancellationToken))
         {
             return Result.Failure<AccountResponse>(DomainError.Forbidden(
                 "Clients.Inactive",
                 "Client account is not active."));
         }
 
-        var currencyText = string.IsNullOrWhiteSpace(request.Currency) ? nameof(Currency.UAH) : request.Currency.Trim();
+        var currencyText = string.IsNullOrWhiteSpace(request.Currency)
+            ? nameof(Currency.UAH)
+            : request.Currency.Trim().ToUpperInvariant();
+
         Currency? parsedCurrency = currencyText switch
         {
             nameof(Currency.UAH) => Currency.UAH,
@@ -65,7 +70,7 @@ public sealed class AccountsService(
 
         var iban = await GenerateUniqueIbanAsync(cancellationToken);
         var accountResult = Account.Open(
-            currentUser.ClientId.Value,
+            clientId,
             iban,
             currency,
             request.InitialDeposit,
@@ -80,6 +85,7 @@ public sealed class AccountsService(
         await accountRepository.AddAsync(account, cancellationToken);
         await accountRepository.SaveChangesAsync(cancellationToken);
 
+        LogAccountOpened(logger, account.Id, clientId, account.Currency);
         return Result.Success(MapToResponse(account));
     }
 
@@ -87,7 +93,7 @@ public sealed class AccountsService(
         Guid accountId,
         CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<AccountResponse>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
@@ -102,7 +108,7 @@ public sealed class AccountsService(
                 "Account was not found."));
         }
 
-        if (!currentUser.IsAdmin && account.ClientId != currentUser.ClientId.Value)
+        if (!currentUser.IsAdmin && account.ClientId != clientId)
         {
             return Result.Failure<AccountResponse>(DomainError.Forbidden(
                 "Accounts.Forbidden",
@@ -116,36 +122,28 @@ public sealed class AccountsService(
         Guid accountId,
         CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<AccountResponse>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
                 "Authentication is required."));
         }
 
-        var account = await accountRepository.GetByIdAsync(accountId, cancellationToken);
-        if (account is null)
-        {
-            return Result.Failure<AccountResponse>(DomainError.NotFound(
-                "Accounts.NotFound",
-                "Account was not found."));
-        }
-
-        if (!currentUser.IsAdmin && account.ClientId != currentUser.ClientId.Value)
+        if (!await clientsApi.IsActiveClientAsync(clientId, cancellationToken))
         {
             return Result.Failure<AccountResponse>(DomainError.Forbidden(
-                "Accounts.Forbidden",
-                "You do not have permission to close this account."));
+                "Clients.Inactive",
+                "Client account is not active."));
         }
 
-        var closeResult = account.Close();
+        var closeResult = await accountRepository.CloseAccountAtomicAsync(accountId, clientId, cancellationToken);
         if (closeResult.IsFailure)
         {
             return Result.Failure<AccountResponse>(closeResult.Error);
         }
 
-        await accountRepository.SaveChangesAsync(cancellationToken);
-        return Result.Success(MapToResponse(account));
+        LogAccountClosed(logger, accountId, clientId);
+        return Result.Success(MapToResponse(closeResult.Value));
     }
 
     private async Task<string> GenerateUniqueIbanAsync(CancellationToken cancellationToken)
@@ -173,4 +171,16 @@ public sealed class AccountsService(
             account.AvailableBalance,
             account.Status.ToString(),
             account.OpenedAtUtc);
+
+    [LoggerMessage(
+        EventId = 3001,
+        Level = LogLevel.Information,
+        Message = "Account {AccountId} opened for client {ClientId} in {Currency}")]
+    private static partial void LogAccountOpened(ILogger logger, Guid accountId, Guid clientId, Currency currency);
+
+    [LoggerMessage(
+        EventId = 3002,
+        Level = LogLevel.Information,
+        Message = "Account {AccountId} closed by client {ClientId}")]
+    private static partial void LogAccountClosed(ILogger logger, Guid accountId, Guid clientId);
 }

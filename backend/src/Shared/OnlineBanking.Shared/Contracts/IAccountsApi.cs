@@ -13,6 +13,7 @@ public sealed record AccountSummaryDto(
     string Status);
 
 public sealed record TransferExecutionRequest(
+    Guid TransactionId,
     Guid FromAccountId,
     Guid ToAccountId,
     decimal Amount,

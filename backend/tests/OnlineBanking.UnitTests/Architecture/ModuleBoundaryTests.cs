@@ -31,6 +31,9 @@ public sealed class ModuleBoundaryTests
     [Fact]
     public void Shared_MustNotDependOnAspNetCore_EfCore_OrModules()
     {
+        var sharedTypes = Types.InAssembly(SharedAssembly).GetTypes();
+        Assert.NotEmpty(sharedTypes);
+
         var result = Types.InAssembly(SharedAssembly)
             .ShouldNot()
             .HaveDependencyOnAny(
@@ -90,9 +93,15 @@ public sealed class ModuleBoundaryTests
     }
 
     [Theory]
-    [MemberData(nameof(ModuleAssemblies))]
+    [MemberData(nameof(ModuleDomainNamespaces))]
     public void DomainLayer_MustNotDependOnApi_Application_AspNetCore_OrEfCore(Assembly moduleAssembly, string domainNamespace)
     {
+        var domainTypes = Types.InAssembly(moduleAssembly)
+            .That()
+            .ResideInNamespace(domainNamespace)
+            .GetTypes();
+        Assert.NotEmpty(domainTypes);
+
         var result = Types.InAssembly(moduleAssembly)
             .That()
             .ResideInNamespace(domainNamespace)
@@ -100,6 +109,29 @@ public sealed class ModuleBoundaryTests
             .HaveDependencyOnAny(
                 $"{moduleAssembly.GetName().Name}.Api",
                 $"{moduleAssembly.GetName().Name}.Application",
+                "Microsoft.AspNetCore",
+                "Microsoft.EntityFrameworkCore")
+            .GetResult();
+
+        Assert.True(result.IsSuccessful, FormatFailingTypes(result));
+    }
+
+    [Theory]
+    [MemberData(nameof(ModuleApplicationNamespaces))]
+    public void ApplicationLayer_MustNotDependOnApi_AspNetCore_OrEfCore(Assembly moduleAssembly, string applicationNamespace)
+    {
+        var applicationTypes = Types.InAssembly(moduleAssembly)
+            .That()
+            .ResideInNamespace(applicationNamespace)
+            .GetTypes();
+        Assert.NotEmpty(applicationTypes);
+
+        var result = Types.InAssembly(moduleAssembly)
+            .That()
+            .ResideInNamespace(applicationNamespace)
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                $"{moduleAssembly.GetName().Name}.Api",
                 "Microsoft.AspNetCore",
                 "Microsoft.EntityFrameworkCore")
             .GetResult();
@@ -125,11 +157,18 @@ public sealed class ModuleBoundaryTests
         Assert.True(typeCheck.IsSuccessful, FormatFailingTypes(typeCheck));
     }
 
-    public static TheoryData<Assembly, string> ModuleAssemblies() => new()
+    public static TheoryData<Assembly, string> ModuleDomainNamespaces() => new()
     {
         { ClientsAssembly, "OnlineBanking.Module.Clients.Domain" },
         { AccountsAssembly, "OnlineBanking.Module.Accounts.Domain" },
         { TransactionsAssembly, "OnlineBanking.Module.Transactions.Domain" }
+    };
+
+    public static TheoryData<Assembly, string> ModuleApplicationNamespaces() => new()
+    {
+        { ClientsAssembly, "OnlineBanking.Module.Clients.Application" },
+        { AccountsAssembly, "OnlineBanking.Module.Accounts.Application" },
+        { TransactionsAssembly, "OnlineBanking.Module.Transactions.Application" }
     };
 
     private static string FormatFailingTypes(TestResult result) =>

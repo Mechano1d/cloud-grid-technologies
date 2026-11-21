@@ -45,7 +45,7 @@ builder.Services.AddCors(options =>
                 .AllowAnyHeader()
                 .AllowAnyMethod();
         }
-        else
+        else if (builder.Environment.IsDevelopment())
         {
             policy.AllowAnyOrigin()
                 .AllowAnyHeader()
@@ -62,7 +62,7 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     var dbContext = scope.ServiceProvider.GetRequiredService<OnlineBankingDbContext>();
     await dbContext.Database.MigrateAsync();
 
-    if (app.Configuration.GetValue<bool>("Database:SeedOnStartup"))
+    if (app.Configuration.GetValue<bool>("Database:SeedOnStartup") && !app.Environment.IsProduction())
     {
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasherService>();
         var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();

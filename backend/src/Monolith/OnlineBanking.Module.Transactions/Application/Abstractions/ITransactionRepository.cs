@@ -16,4 +16,5 @@ public interface ITransactionRepository
         CancellationToken cancellationToken = default);
     Task AddAsync(Transaction transaction, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default);
 }

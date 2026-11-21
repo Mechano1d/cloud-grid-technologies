@@ -26,6 +26,8 @@ internal sealed class TransactionConfiguration : IEntityTypeConfiguration<Transa
         builder.Property(t => t.Type).HasColumnName("type").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(t => t.Description).HasColumnName("description").HasMaxLength(250);
         builder.Property(t => t.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(100);
+        builder.Property(t => t.FailureCode).HasColumnName("failure_code").HasMaxLength(100);
+        builder.Property(t => t.FailureErrorType).HasColumnName("failure_error_type").HasConversion<string>().HasMaxLength(32);
         builder.Property(t => t.FailureReason).HasColumnName("failure_reason").HasMaxLength(500);
         builder.Property(t => t.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(t => t.CompletedAtUtc).HasColumnName("completed_at_utc");

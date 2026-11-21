@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using OnlineBanking.Module.Transactions.Application.Abstractions;
 using OnlineBanking.Module.Transactions.Domain;
 
@@ -7,7 +8,7 @@ namespace OnlineBanking.Persistence.Repositories;
 internal sealed class TransactionRepository(OnlineBankingDbContext dbContext) : ITransactionRepository
 {
     public Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        dbContext.Transactions.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+        dbContext.Transactions.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
     public Task<Transaction?> GetByIdempotencyKeyAsync(
         Guid initiatedByClientId,
@@ -38,10 +39,11 @@ internal sealed class TransactionRepository(OnlineBankingDbContext dbContext) : 
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
+        var offset = checked((int)((long)(page - 1) * pageSize));
         var items = await query
             .OrderByDescending(t => t.CreatedAtUtc)
             .ThenByDescending(t => t.Id)
-            .Skip((page - 1) * pageSize)
+            .Skip(offset)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
@@ -53,4 +55,24 @@ internal sealed class TransactionRepository(OnlineBankingDbContext dbContext) : 
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
         dbContext.SaveChangesAsync(cancellationToken);
+
+    public async Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            foreach (var entry in dbContext.ChangeTracker.Entries<Transaction>()
+                         .Where(e => e.State == EntityState.Added)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return false;
+        }
+    }
 }

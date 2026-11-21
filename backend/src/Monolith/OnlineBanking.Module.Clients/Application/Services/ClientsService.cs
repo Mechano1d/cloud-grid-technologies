@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OnlineBanking.Infrastructure.Auth;
 using OnlineBanking.Module.Clients.Application.Abstractions;
 using OnlineBanking.Module.Clients.Application.Dtos;
@@ -6,20 +7,21 @@ using OnlineBanking.Shared.Results;
 
 namespace OnlineBanking.Module.Clients.Application.Services;
 
-public sealed class ClientsService(
+public sealed partial class ClientsService(
     IClientRepository clientRepository,
-    ICurrentUser currentUser)
+    ICurrentUser currentUser,
+    ILogger<ClientsService> logger)
 {
     public async Task<Result<ClientResponse>> GetMeAsync(CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<ClientResponse>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
                 "Authentication is required."));
         }
 
-        var client = await clientRepository.GetByIdAsync(currentUser.ClientId.Value, cancellationToken);
+        var client = await clientRepository.GetByIdAsNoTrackingAsync(clientId, cancellationToken);
         if (client is null)
         {
             return Result.Failure<ClientResponse>(DomainError.NotFound(
@@ -42,10 +44,10 @@ public sealed class ClientsService(
         UpdateClientStatusRequest request,
         CancellationToken cancellationToken = default)
     {
-        ClientStatus? parsedStatus = request.Status switch
+        ClientStatus? parsedStatus = request.Status?.Trim().ToUpperInvariant() switch
         {
-            nameof(ClientStatus.Active) => ClientStatus.Active,
-            nameof(ClientStatus.Blocked) => ClientStatus.Blocked,
+            "ACTIVE" => ClientStatus.Active,
+            "BLOCKED" => ClientStatus.Blocked,
             _ => null
         };
 
@@ -54,6 +56,15 @@ public sealed class ClientsService(
             return Result.Failure<ClientResponse>(DomainError.Validation(
                 "Clients.InvalidStatus",
                 "Status must be Active or Blocked."));
+        }
+
+        if (currentUser.TryGetClientId(out var actorClientId) &&
+            actorClientId == clientId &&
+            newStatus == ClientStatus.Blocked)
+        {
+            return Result.Failure<ClientResponse>(DomainError.Conflict(
+                "Clients.CannotBlockSelf",
+                "Administrators cannot block their own account."));
         }
 
         var client = await clientRepository.GetByIdAsync(clientId, cancellationToken);
@@ -71,6 +82,8 @@ public sealed class ClientsService(
         }
 
         await clientRepository.SaveChangesAsync(cancellationToken);
+        LogClientStatusUpdated(logger, clientId, newStatus, actorClientId);
+
         return Result.Success(MapToResponse(client));
     }
 
@@ -85,4 +98,14 @@ public sealed class ClientsService(
             client.Role.ToString(),
             client.Status.ToString(),
             client.CreatedAtUtc);
+
+    [LoggerMessage(
+        EventId = 2004,
+        Level = LogLevel.Information,
+        Message = "Client {ClientId} status changed to {Status} by admin {ActorClientId}")]
+    private static partial void LogClientStatusUpdated(
+        ILogger logger,
+        Guid clientId,
+        ClientStatus status,
+        Guid actorClientId);
 }

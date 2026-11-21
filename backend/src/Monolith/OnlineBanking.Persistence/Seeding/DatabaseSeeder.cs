@@ -30,7 +30,8 @@ public static class DatabaseSeeder
             "+380670000001",
             new DateOnly(1990, 1, 1),
             "1000000001",
-            hashPassword("Admin#2026!"),
+            "Admin#2026!",
+            hashPassword,
             ClientRole.Admin,
             now,
             cancellationToken);
@@ -43,7 +44,8 @@ public static class DatabaseSeeder
             "+380671110001",
             new DateOnly(1998, 4, 12),
             "3000000001",
-            hashPassword("Client#2026!"),
+            "Client#2026!",
+            hashPassword,
             ClientRole.Client,
             now,
             cancellationToken);
@@ -56,7 +58,8 @@ public static class DatabaseSeeder
             "+380671110002",
             new DateOnly(1997, 8, 25),
             "3000000002",
-            hashPassword("Client#2026!"),
+            "Client#2026!",
+            hashPassword,
             ClientRole.Client,
             now,
             cancellationToken);
@@ -92,7 +95,8 @@ public static class DatabaseSeeder
         string phone,
         DateOnly birthDate,
         string taxId,
-        string passwordHash,
+        string rawPassword,
+        Func<string, string> hashPassword,
         ClientRole role,
         DateTimeOffset createdAtUtc,
         CancellationToken cancellationToken)
@@ -112,7 +116,7 @@ public static class DatabaseSeeder
             phone,
             birthDate,
             taxId,
-            passwordHash,
+            hashPassword(rawPassword),
             createdAtUtc,
             role,
             id).Value;

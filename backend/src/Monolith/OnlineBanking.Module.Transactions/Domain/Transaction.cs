@@ -1,4 +1,5 @@
 using OnlineBanking.Shared.Results;
+using OnlineBanking.Shared.Validation;
 
 namespace OnlineBanking.Module.Transactions.Domain;
 
@@ -45,6 +46,8 @@ public sealed class Transaction
     public TransactionType Type { get; private set; }
     public string? Description { get; private set; }
     public string? IdempotencyKey { get; private set; }
+    public string? FailureCode { get; private set; }
+    public ErrorType? FailureErrorType { get; private set; }
     public string? FailureReason { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset? CompletedAtUtc { get; private set; }
@@ -82,7 +85,7 @@ public sealed class Transaction
                 "Destination IBAN is required."));
         }
 
-        if (amount <= 0m || decimal.Round(amount, 2) != amount)
+        if (!MoneyValidation.IsValidPositiveAmount(amount))
         {
             return Result.Failure<Transaction>(DomainError.Validation(
                 "Transactions.InvalidAmount",
@@ -141,7 +144,7 @@ public sealed class Transaction
         return Result.Success();
     }
 
-    public Result MarkFailed(string reason, DateTimeOffset completedAtUtc)
+    public Result MarkFailed(DomainError error, DateTimeOffset completedAtUtc)
     {
         if (Status != TransactionStatus.Pending)
         {
@@ -151,8 +154,16 @@ public sealed class Transaction
         }
 
         Status = TransactionStatus.Failed;
-        FailureReason = string.IsNullOrWhiteSpace(reason) ? "Transfer failed." : reason.Trim();
+        FailureCode = string.IsNullOrWhiteSpace(error.Code) ? "Transactions.TransferFailed" : error.Code;
+        FailureErrorType = error.Type == ErrorType.None ? ErrorType.Conflict : error.Type;
+        FailureReason = string.IsNullOrWhiteSpace(error.Message) ? "Transfer failed." : error.Message.Trim();
         CompletedAtUtc = completedAtUtc;
         return Result.Success();
     }
+
+    public DomainError GetFailureDomainError() =>
+        new(
+            FailureCode ?? "Transactions.TransferFailed",
+            FailureReason ?? "Transfer failed.",
+            FailureErrorType ?? ErrorType.Conflict);
 }

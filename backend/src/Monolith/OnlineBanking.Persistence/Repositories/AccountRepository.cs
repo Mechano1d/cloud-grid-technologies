@@ -9,9 +9,6 @@ namespace OnlineBanking.Persistence.Repositories;
 
 internal sealed class AccountRepository(OnlineBankingDbContext dbContext) : IAccountRepository
 {
-    public Task<Account?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        dbContext.Accounts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
-
     public Task<Account?> GetByIdAsNoTrackingAsync(Guid id, CancellationToken cancellationToken = default) =>
         dbContext.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
 
@@ -44,6 +41,52 @@ internal sealed class AccountRepository(OnlineBankingDbContext dbContext) : IAcc
 
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
         dbContext.SaveChangesAsync(cancellationToken);
+
+    public async Task<Result<Account>> CloseAccountAtomicAsync(
+        Guid accountId,
+        Guid ownerClientId,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var entry in dbContext.ChangeTracker.Entries<Account>().ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+
+        await using var transaction = await dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+
+        var account = await dbContext.Accounts
+            .FromSqlInterpolated($"SELECT * FROM accounts.accounts WHERE id = {accountId} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (account is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result.Failure<Account>(DomainError.NotFound(
+                "Accounts.NotFound",
+                "Account was not found."));
+        }
+
+        if (account.ClientId != ownerClientId)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result.Failure<Account>(DomainError.Forbidden(
+                "Accounts.Forbidden",
+                "You do not have permission to close this account."));
+        }
+
+        var closeResult = account.Close();
+        if (closeResult.IsFailure)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Result.Failure<Account>(closeResult.Error);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Result.Success(account);
+    }
 
     public async Task<Result<TransferExecutionResult>> ExecuteAtomicTransferAsync(
         TransferExecutionRequest request,

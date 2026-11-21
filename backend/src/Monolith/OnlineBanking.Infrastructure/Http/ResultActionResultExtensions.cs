@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OnlineBanking.Shared.Results;
@@ -16,8 +17,14 @@ public static class ResultActionResultExtensions
         this Result<TValue> result,
         HttpContext httpContext,
         string location) =>
+        result.ToCreatedResult(httpContext, _ => location);
+
+    public static IActionResult ToCreatedResult<TValue>(
+        this Result<TValue> result,
+        HttpContext httpContext,
+        Func<TValue, string> locationFactory) =>
         result.IsSuccess
-            ? new CreatedResult(location, result.Value)
+            ? new CreatedResult(locationFactory(result.Value), result.Value)
             : ToProblem(result.Error, httpContext);
 
     public static IActionResult ToProblem(DomainError error, HttpContext httpContext)
@@ -42,6 +49,7 @@ public static class ResultActionResultExtensions
         };
 
         problemDetails.Extensions["code"] = error.Code;
+        problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? httpContext.TraceIdentifier;
 
         var objectResult = new ObjectResult(problemDetails)
         {

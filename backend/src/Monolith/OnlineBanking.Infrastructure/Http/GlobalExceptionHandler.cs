@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -5,7 +6,9 @@ using Microsoft.Extensions.Logging;
 
 namespace OnlineBanking.Infrastructure.Http;
 
-public sealed partial class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+public sealed partial class GlobalExceptionHandler(
+    IProblemDetailsService problemDetailsService,
+    ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -22,8 +25,19 @@ public sealed partial class GlobalExceptionHandler(ILogger<GlobalExceptionHandle
             Detail = "An unexpected error occurred while processing the request.",
             Instance = httpContext.Request.Path.Value
         };
+        problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? httpContext.TraceIdentifier;
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        if (await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+            {
+                HttpContext = httpContext,
+                ProblemDetails = problemDetails,
+                Exception = exception
+            }))
+        {
+            return true;
+        }
+
         await httpContext.Response.WriteAsJsonAsync(
             problemDetails,
             options: null,

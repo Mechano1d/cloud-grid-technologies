@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OnlineBanking.Infrastructure.Auth;
 using OnlineBanking.Module.Transactions.Application.Abstractions;
 using OnlineBanking.Module.Transactions.Application.Dtos;
@@ -5,25 +6,35 @@ using OnlineBanking.Module.Transactions.Domain;
 using OnlineBanking.Shared.Contracts;
 using OnlineBanking.Shared.Results;
 using OnlineBanking.Shared.Time;
+using OnlineBanking.Shared.Validation;
 
 namespace OnlineBanking.Module.Transactions.Application.Services;
 
-public sealed class TransfersService(
+public sealed partial class TransfersService(
     ITransactionRepository transactionRepository,
     IAccountsApi accountsApi,
+    IClientsApi clientsApi,
     ICurrentUser currentUser,
-    IDateTimeProvider dateTimeProvider)
+    IDateTimeProvider dateTimeProvider,
+    ILogger<TransfersService> logger)
 {
     public async Task<Result<TransactionResponse>> CreateTransferAsync(
         CreateTransferRequest request,
         string? idempotencyKey,
         CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<TransactionResponse>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
                 "Authentication is required."));
+        }
+
+        if (!await clientsApi.IsActiveClientAsync(clientId, cancellationToken))
+        {
+            return Result.Failure<TransactionResponse>(DomainError.Forbidden(
+                "Clients.Inactive",
+                "Client account is not active."));
         }
 
         var normalizedKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
@@ -35,38 +46,22 @@ public sealed class TransfersService(
         }
 
         var normalizedToIban = request.ToIban?.Trim().ToUpperInvariant() ?? string.Empty;
+        var normalizedDescription = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
         if (normalizedKey is not null)
         {
             var existing = await transactionRepository.GetByIdempotencyKeyAsync(
-                currentUser.ClientId.Value,
+                clientId,
                 normalizedKey,
                 cancellationToken);
 
             if (existing is not null)
             {
-                if (existing.FromAccountId != request.FromAccountId ||
-                    existing.Amount != request.Amount ||
-                    !string.Equals(existing.ToIban, normalizedToIban, StringComparison.Ordinal))
-                {
-                    return Result.Failure<TransactionResponse>(DomainError.Conflict(
-                        "Transactions.IdempotencyKeyMismatch",
-                        "Idempotency-Key was already used with different transfer parameters."));
-                }
-
-                return existing.Status switch
-                {
-                    TransactionStatus.Completed => Result.Success(MapToResponse(existing)),
-                    TransactionStatus.Failed => Result.Failure<TransactionResponse>(DomainError.Conflict(
-                        "Transactions.TransferFailed",
-                        existing.FailureReason ?? "Transfer failed.")),
-                    _ => Result.Failure<TransactionResponse>(DomainError.Conflict(
-                        "Transactions.InProgress",
-                        "Transfer is currently in progress."))
-                };
+                return EvaluateIdempotentReplay(existing, request.FromAccountId, normalizedToIban, request.Amount, normalizedDescription);
             }
         }
 
-        if (request.Amount <= 0m || decimal.Round(request.Amount, 2) != request.Amount)
+        if (!MoneyValidation.IsValidPositiveAmount(request.Amount))
         {
             return Result.Failure<TransactionResponse>(DomainError.Validation(
                 "Transactions.InvalidAmount",
@@ -81,7 +76,7 @@ public sealed class TransfersService(
                 "Source account was not found."));
         }
 
-        if (!currentUser.IsAdmin && fromAccount.ClientId != currentUser.ClientId.Value)
+        if (fromAccount.ClientId != clientId)
         {
             return Result.Failure<TransactionResponse>(DomainError.Forbidden(
                 "Accounts.Forbidden",
@@ -97,13 +92,13 @@ public sealed class TransfersService(
         }
 
         var pendingResult = Transaction.CreatePending(
-            currentUser.ClientId.Value,
+            clientId,
             fromAccount.Id,
             toAccount.Id,
             toAccount.Iban,
             request.Amount,
             fromAccount.Currency,
-            request.Description,
+            normalizedDescription,
             normalizedKey,
             dateTimeProvider.UtcNow);
 
@@ -114,25 +109,65 @@ public sealed class TransfersService(
 
         var transaction = pendingResult.Value;
         await transactionRepository.AddAsync(transaction, cancellationToken);
-        await transactionRepository.SaveChangesAsync(cancellationToken);
+        if (!await transactionRepository.TrySaveChangesAsync(cancellationToken))
+        {
+            if (normalizedKey is not null)
+            {
+                var concurrentExisting = await transactionRepository.GetByIdempotencyKeyAsync(
+                    clientId,
+                    normalizedKey,
+                    cancellationToken);
 
-        var executionResult = await accountsApi.ExecuteTransferAsync(
-            new TransferExecutionRequest(
-                fromAccount.Id,
-                toAccount.Id,
-                request.Amount,
-                fromAccount.Currency),
-            cancellationToken);
+                if (concurrentExisting is not null)
+                {
+                    return EvaluateIdempotentReplay(
+                        concurrentExisting,
+                        request.FromAccountId,
+                        normalizedToIban,
+                        request.Amount,
+                        normalizedDescription);
+                }
+            }
+
+            return Result.Failure<TransactionResponse>(DomainError.Conflict(
+                "Transactions.DuplicateRequest",
+                "Duplicate transfer request."));
+        }
+
+        Result<TransferExecutionResult> executionResult;
+        try
+        {
+            executionResult = await accountsApi.ExecuteTransferAsync(
+                new TransferExecutionRequest(
+                    transaction.Id,
+                    fromAccount.Id,
+                    toAccount.Id,
+                    request.Amount,
+                    fromAccount.Currency),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var failureError = DomainError.Conflict(
+                "Transactions.ExecutionFailed",
+                "Transfer execution failed unexpectedly.");
+            transaction.MarkFailed(failureError, dateTimeProvider.UtcNow);
+            await transactionRepository.SaveChangesAsync(CancellationToken.None);
+            LogTransferException(logger, ex, transaction.Id, fromAccount.Id, toAccount.Id);
+            throw;
+        }
 
         if (executionResult.IsFailure)
         {
-            transaction.MarkFailed(executionResult.Error.Message, dateTimeProvider.UtcNow);
-            await transactionRepository.SaveChangesAsync(cancellationToken);
+            transaction.MarkFailed(executionResult.Error, dateTimeProvider.UtcNow);
+            await transactionRepository.SaveChangesAsync(CancellationToken.None);
+            LogTransferFailed(logger, transaction.Id, fromAccount.Id, toAccount.Id, executionResult.Error.Code);
             return Result.Failure<TransactionResponse>(executionResult.Error);
         }
 
         transaction.MarkCompleted(dateTimeProvider.UtcNow);
-        await transactionRepository.SaveChangesAsync(cancellationToken);
+        await transactionRepository.SaveChangesAsync(CancellationToken.None);
+        LogTransferCompleted(logger, transaction.Id, fromAccount.Id, toAccount.Id, request.Amount, fromAccount.Currency);
 
         return Result.Success(MapToResponse(transaction));
     }
@@ -143,7 +178,7 @@ public sealed class TransfersService(
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<TransactionPageResponse>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
@@ -164,6 +199,13 @@ public sealed class TransfersService(
                 "Page size must be between 1 and 100."));
         }
 
+        if ((long)(page - 1) * pageSize > int.MaxValue)
+        {
+            return Result.Failure<TransactionPageResponse>(DomainError.Validation(
+                "Transactions.PageOverflow",
+                "Requested page exceeds maximum pagination range."));
+        }
+
         IReadOnlyCollection<Guid>? filterAccountIds;
         if (accountId.HasValue)
         {
@@ -175,7 +217,7 @@ public sealed class TransfersService(
                     "Account was not found."));
             }
 
-            if (!currentUser.IsAdmin && account.ClientId != currentUser.ClientId.Value)
+            if (!currentUser.IsAdmin && account.ClientId != clientId)
             {
                 return Result.Failure<TransactionPageResponse>(DomainError.Forbidden(
                     "Accounts.Forbidden",
@@ -188,7 +230,7 @@ public sealed class TransfersService(
         {
             filterAccountIds = currentUser.IsAdmin
                 ? null
-                : await accountsApi.GetAccountIdsByClientAsync(currentUser.ClientId.Value, cancellationToken);
+                : await accountsApi.GetAccountIdsByClientAsync(clientId, cancellationToken);
         }
 
         var (items, totalCount) = await transactionRepository.ListPageAsync(
@@ -208,7 +250,7 @@ public sealed class TransfersService(
         Guid transactionId,
         CancellationToken cancellationToken = default)
     {
-        if (!currentUser.ClientId.HasValue)
+        if (!currentUser.TryGetClientId(out var clientId))
         {
             return Result.Failure<TransactionResponse>(DomainError.Unauthorized(
                 "Auth.Unauthenticated",
@@ -225,9 +267,7 @@ public sealed class TransfersService(
 
         if (!currentUser.IsAdmin)
         {
-            var myAccountIds = await accountsApi.GetAccountIdsByClientAsync(
-                currentUser.ClientId.Value,
-                cancellationToken);
+            var myAccountIds = await accountsApi.GetAccountIdsByClientAsync(clientId, cancellationToken);
 
             if (!myAccountIds.Contains(transaction.FromAccountId) &&
                 !myAccountIds.Contains(transaction.ToAccountId))
@@ -239,6 +279,33 @@ public sealed class TransfersService(
         }
 
         return Result.Success(MapToResponse(transaction));
+    }
+
+    private static Result<TransactionResponse> EvaluateIdempotentReplay(
+        Transaction existing,
+        Guid fromAccountId,
+        string normalizedToIban,
+        decimal amount,
+        string? normalizedDescription)
+    {
+        if (existing.FromAccountId != fromAccountId ||
+            existing.Amount != amount ||
+            !string.Equals(existing.ToIban, normalizedToIban, StringComparison.Ordinal) ||
+            !string.Equals(existing.Description, normalizedDescription, StringComparison.Ordinal))
+        {
+            return Result.Failure<TransactionResponse>(DomainError.Conflict(
+                "Transactions.IdempotencyKeyMismatch",
+                "Idempotency-Key was already used with different transfer parameters."));
+        }
+
+        return existing.Status switch
+        {
+            TransactionStatus.Completed => Result.Success(MapToResponse(existing)),
+            TransactionStatus.Failed => Result.Failure<TransactionResponse>(existing.GetFailureDomainError()),
+            _ => Result.Failure<TransactionResponse>(DomainError.Conflict(
+                "Transactions.InProgress",
+                "Transfer is currently in progress."))
+        };
     }
 
     private static TransactionResponse MapToResponse(Transaction transaction) =>
@@ -254,4 +321,38 @@ public sealed class TransfersService(
             transaction.Description,
             transaction.IdempotencyKey,
             transaction.CreatedAtUtc);
+
+    [LoggerMessage(
+        EventId = 4001,
+        Level = LogLevel.Information,
+        Message = "Transfer {TransactionId} completed from {FromAccountId} to {ToAccountId} for {Amount} {Currency}")]
+    private static partial void LogTransferCompleted(
+        ILogger logger,
+        Guid transactionId,
+        Guid fromAccountId,
+        Guid toAccountId,
+        decimal amount,
+        string currency);
+
+    [LoggerMessage(
+        EventId = 4002,
+        Level = LogLevel.Warning,
+        Message = "Transfer {TransactionId} failed from {FromAccountId} to {ToAccountId} with code {ErrorCode}")]
+    private static partial void LogTransferFailed(
+        ILogger logger,
+        Guid transactionId,
+        Guid fromAccountId,
+        Guid toAccountId,
+        string errorCode);
+
+    [LoggerMessage(
+        EventId = 4003,
+        Level = LogLevel.Error,
+        Message = "Transfer {TransactionId} threw an unexpected exception from {FromAccountId} to {ToAccountId}")]
+    private static partial void LogTransferException(
+        ILogger logger,
+        Exception exception,
+        Guid transactionId,
+        Guid fromAccountId,
+        Guid toAccountId);
 }

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using OnlineBanking.Infrastructure.Auth;
 using OnlineBanking.Module.Clients.Application.Abstractions;
 using OnlineBanking.Module.Clients.Application.Dtos;
@@ -7,11 +8,12 @@ using OnlineBanking.Shared.Time;
 
 namespace OnlineBanking.Module.Clients.Application.Services;
 
-public sealed class AuthService(
+public sealed partial class AuthService(
     IClientRepository clientRepository,
     IPasswordHasherService passwordHasher,
     IJwtTokenGenerator jwtTokenGenerator,
-    IDateTimeProvider dateTimeProvider)
+    IDateTimeProvider dateTimeProvider,
+    ILogger<AuthService> logger)
 {
     public async Task<Result<AuthResponse>> RegisterAsync(
         RegisterRequest request,
@@ -52,7 +54,14 @@ public sealed class AuthService(
 
         var client = clientResult.Value;
         await clientRepository.AddAsync(client, cancellationToken);
-        await clientRepository.SaveChangesAsync(cancellationToken);
+        if (!await clientRepository.TrySaveChangesAsync(cancellationToken))
+        {
+            return Result.Failure<AuthResponse>(DomainError.Conflict(
+                "Clients.AlreadyExists",
+                "A client with the specified email or tax ID already exists."));
+        }
+
+        LogClientRegistered(logger, client.Id, client.Role);
 
         var token = jwtTokenGenerator.Generate(client.Id, client.Email, client.Role.ToString());
         return Result.Success(new AuthResponse(
@@ -67,16 +76,17 @@ public sealed class AuthService(
         CancellationToken cancellationToken = default)
     {
         var normalizedEmail = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(normalizedEmail) || string.IsNullOrEmpty(request.Password))
-        {
-            return Result.Failure<AuthResponse>(DomainError.Unauthorized(
-                "Auth.InvalidCredentials",
-                "Invalid email or password."));
-        }
+        var client = string.IsNullOrWhiteSpace(normalizedEmail)
+            ? null
+            : await clientRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
 
-        var client = await clientRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
-        if (client is null || !passwordHasher.Verify(request.Password, client.PasswordHash))
+        var passwordMatches = passwordHasher.Verify(
+            request.Password ?? string.Empty,
+            client?.PasswordHash ?? passwordHasher.DummyHash);
+
+        if (client is null || !passwordMatches || string.IsNullOrEmpty(request.Password))
         {
+            LogLoginFailed(logger, client?.Id);
             return Result.Failure<AuthResponse>(DomainError.Unauthorized(
                 "Auth.InvalidCredentials",
                 "Invalid email or password."));
@@ -84,6 +94,7 @@ public sealed class AuthService(
 
         if (client.Status == ClientStatus.Blocked)
         {
+            LogBlockedLoginAttempt(logger, client.Id);
             return Result.Failure<AuthResponse>(DomainError.Unauthorized(
                 "Auth.ClientBlocked",
                 "Client account is blocked."));
@@ -96,4 +107,13 @@ public sealed class AuthService(
             client.Id,
             client.Role.ToString()));
     }
+
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Information, Message = "Client {ClientId} registered with role {Role}")]
+    private static partial void LogClientRegistered(ILogger logger, Guid clientId, ClientRole role);
+
+    [LoggerMessage(EventId = 2002, Level = LogLevel.Warning, Message = "Failed login attempt for client {ClientId}")]
+    private static partial void LogLoginFailed(ILogger logger, Guid? clientId);
+
+    [LoggerMessage(EventId = 2003, Level = LogLevel.Warning, Message = "Blocked client {ClientId} attempted to log in")]
+    private static partial void LogBlockedLoginAttempt(ILogger logger, Guid clientId);
 }

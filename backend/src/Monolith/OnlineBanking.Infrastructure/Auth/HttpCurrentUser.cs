@@ -17,11 +17,23 @@ internal sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) 
     }
 
     public string? Role =>
-        Principal?.FindFirstValue("role") ?? Principal?.FindFirstValue(ClaimTypes.Role);
+        Principal?.FindFirstValue(JwtClaimNames.Role) ?? Principal?.FindFirstValue(ClaimTypes.Role);
 
     public bool IsAuthenticated => Principal?.Identity?.IsAuthenticated == true && ClientId.HasValue;
 
     public bool IsAdmin => string.Equals(Role, "Admin", StringComparison.OrdinalIgnoreCase);
+
+    public bool TryGetClientId(out Guid clientId)
+    {
+        if (ClientId is { } id)
+        {
+            clientId = id;
+            return true;
+        }
+
+        clientId = Guid.Empty;
+        return false;
+    }
 
     private ClaimsPrincipal? Principal => httpContextAccessor.HttpContext?.User;
 }

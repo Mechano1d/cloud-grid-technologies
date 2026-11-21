@@ -6,7 +6,6 @@ namespace OnlineBanking.Module.Accounts.Application.Abstractions;
 
 public interface IAccountRepository
 {
-    Task<Account?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Account?> GetByIdAsNoTrackingAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Account?> GetByIbanAsNoTrackingAsync(string normalizedIban, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Account>> ListByClientIdAsync(Guid clientId, CancellationToken cancellationToken = default);
@@ -14,6 +13,10 @@ public interface IAccountRepository
     Task<bool> ExistsByIbanAsync(string normalizedIban, CancellationToken cancellationToken = default);
     Task AddAsync(Account account, CancellationToken cancellationToken = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<Result<Account>> CloseAccountAtomicAsync(
+        Guid accountId,
+        Guid ownerClientId,
+        CancellationToken cancellationToken = default);
     Task<Result<TransferExecutionResult>> ExecuteAtomicTransferAsync(
         TransferExecutionRequest request,
         CancellationToken cancellationToken = default);

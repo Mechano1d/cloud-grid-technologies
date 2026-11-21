@@ -23,12 +23,13 @@ public static class InfrastructureInjection
         services.Configure<JwtOptions>(jwtSection);
 
         var jwtOptions = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
-        if (string.IsNullOrWhiteSpace(jwtOptions.SecretKey) || jwtOptions.SecretKey.Length < 32)
+        var keyBytes = Encoding.UTF8.GetBytes(jwtOptions.SecretKey ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(jwtOptions.SecretKey) || keyBytes.Length < 32)
         {
-            throw new InvalidOperationException("Jwt:SecretKey must be configured and at least 32 characters long.");
+            throw new InvalidOperationException("Jwt:SecretKey must be configured and at least 32 UTF-8 bytes long.");
         }
 
-        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SecretKey));
+        var signingKey = new SymmetricSecurityKey(keyBytes);
 
         services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -43,10 +44,11 @@ public static class InfrastructureInjection
                     ValidAudience = jwtOptions.Audience,
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = signingKey,
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
                     NameClaimType = JwtRegisteredClaimNames.Sub,
-                    RoleClaimType = "role"
+                    RoleClaimType = JwtClaimNames.Role
                 };
             });
 

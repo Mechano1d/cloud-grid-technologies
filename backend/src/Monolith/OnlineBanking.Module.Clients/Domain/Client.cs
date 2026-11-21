@@ -79,12 +79,20 @@ public sealed class Client
                 "Phone number must be between 1 and 30 characters."));
         }
 
+        var referenceDate = DateOnly.FromDateTime(createdAtUtc.UtcDateTime);
+        if (birthDate > referenceDate.AddYears(-14) || birthDate < referenceDate.AddYears(-120))
+        {
+            return Result.Failure<Client>(DomainError.Validation(
+                "Clients.InvalidBirthDate",
+                "Client age must be between 14 and 120 years."));
+        }
+
         var trimmedTaxId = taxId?.Trim() ?? string.Empty;
-        if (trimmedTaxId.Length is < 8 or > 20)
+        if (trimmedTaxId.Length is < 8 or > 20 || !trimmedTaxId.All(char.IsAsciiDigit))
         {
             return Result.Failure<Client>(DomainError.Validation(
                 "Clients.InvalidTaxId",
-                "Tax ID must be between 8 and 20 characters."));
+                "Tax ID must contain between 8 and 20 digits."));
         }
 
         if (string.IsNullOrWhiteSpace(passwordHash))

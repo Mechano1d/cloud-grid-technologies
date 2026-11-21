@@ -65,6 +65,46 @@ public sealed class ClientTests
         Assert.Equal("Clients.InvalidEmail", result.Error.Code);
     }
 
+    [Theory]
+    [InlineData(2099, 1, 1)]
+    [InlineData(2020, 1, 1)]
+    [InlineData(1850, 1, 1)]
+    public void Create_WithOutOfRangeBirthDate_ReturnsValidationFailure(int year, int month, int day)
+    {
+        var result = Client.Create(
+            "Ivan Petrenko",
+            "ivan@example.com",
+            "+380671234567",
+            new DateOnly(year, month, day),
+            "1234567890",
+            "hashed-password",
+            Now);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Validation, result.Error.Type);
+        Assert.Equal("Clients.InvalidBirthDate", result.Error.Code);
+    }
+
+    [Theory]
+    [InlineData("1234567")]
+    [InlineData("12345ABC90")]
+    [InlineData("123456789012345678901")]
+    public void Create_WithInvalidTaxId_ReturnsValidationFailure(string taxId)
+    {
+        var result = Client.Create(
+            "Ivan Petrenko",
+            "ivan@example.com",
+            "+380671234567",
+            new DateOnly(1999, 5, 10),
+            taxId,
+            "hashed-password",
+            Now);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.Validation, result.Error.Type);
+        Assert.Equal("Clients.InvalidTaxId", result.Error.Code);
+    }
+
     [Fact]
     public void UpdateStatus_ToBlocked_UpdatesStatusAndReason()
     {

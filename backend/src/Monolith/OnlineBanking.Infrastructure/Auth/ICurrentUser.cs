@@ -6,4 +6,5 @@ public interface ICurrentUser
     string? Role { get; }
     bool IsAuthenticated { get; }
     bool IsAdmin { get; }
+    bool TryGetClientId(out Guid clientId);
 }

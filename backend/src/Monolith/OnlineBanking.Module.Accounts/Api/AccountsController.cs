@@ -24,9 +24,7 @@ public sealed class AccountsController(AccountsService accountsService) : Contro
         CancellationToken cancellationToken)
     {
         var result = await accountsService.OpenAccountAsync(request ?? new OpenAccountRequest(), cancellationToken);
-        return result.IsSuccess
-            ? result.ToCreatedResult(HttpContext, $"/api/v1/accounts/{result.Value.Id}")
-            : result.ToActionResult(HttpContext);
+        return result.ToCreatedResult(HttpContext, account => $"/api/v1/accounts/{account.Id}");
     }
 
     [HttpGet("{accountId:guid}")]

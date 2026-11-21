@@ -26,5 +26,6 @@ internal sealed class ClientConfiguration : IEntityTypeConfiguration<Client>
 
         builder.HasIndex(c => c.Email).IsUnique().HasDatabaseName("ux_clients_email");
         builder.HasIndex(c => c.TaxId).IsUnique().HasDatabaseName("ux_clients_tax_id");
+        builder.HasIndex(c => c.CreatedAtUtc).HasDatabaseName("ix_clients_created_at_utc");
     }
 }

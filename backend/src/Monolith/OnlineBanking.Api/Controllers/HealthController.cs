@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OnlineBanking.Persistence;
 using OnlineBanking.Shared.Time;
 
 namespace OnlineBanking.Api.Controllers;
@@ -7,14 +9,23 @@ namespace OnlineBanking.Api.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("health")]
-public sealed class HealthController(IDateTimeProvider dateTimeProvider) : ControllerBase
+public sealed class HealthController(
+    OnlineBankingDbContext dbContext,
+    IDateTimeProvider dateTimeProvider) : ControllerBase
 {
     [HttpGet]
-    public IActionResult GetHealth() =>
-        Ok(new
+    public async Task<IActionResult> GetHealth(CancellationToken cancellationToken)
+    {
+        var canConnect = await dbContext.Database.CanConnectAsync(cancellationToken);
+        var payload = new
         {
-            status = "Healthy",
+            status = canConnect ? "Healthy" : "Unhealthy",
             service = "online-banking-monolith",
             timestampUtc = dateTimeProvider.UtcNow
-        });
+        };
+
+        return canConnect
+            ? Ok(payload)
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, payload);
+    }
 }

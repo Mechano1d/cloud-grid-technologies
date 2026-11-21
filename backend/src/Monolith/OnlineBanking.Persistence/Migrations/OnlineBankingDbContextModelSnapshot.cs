@@ -146,6 +146,9 @@ namespace OnlineBanking.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedAtUtc")
+                        .HasDatabaseName("ix_clients_created_at_utc");
+
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("ux_clients_email");
@@ -187,6 +190,16 @@ namespace OnlineBanking.Persistence.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")
                         .HasColumnName("description");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<string>("FailureErrorType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("failure_error_type");
 
                     b.Property<string>("FailureReason")
                         .HasMaxLength(500)

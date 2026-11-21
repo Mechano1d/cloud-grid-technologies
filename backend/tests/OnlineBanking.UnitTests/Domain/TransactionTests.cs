@@ -65,11 +65,33 @@ public sealed class TransactionTests
             Now).Value;
 
         var completed = tx.MarkCompleted(Now.AddSeconds(1));
-        var secondFail = tx.MarkFailed("Late error", Now.AddSeconds(2));
+        var secondFail = tx.MarkFailed(DomainError.Conflict("Transactions.Late", "Late error"), Now.AddSeconds(2));
 
         Assert.True(completed.IsSuccess);
         Assert.Equal(TransactionStatus.Completed, tx.Status);
         Assert.True(secondFail.IsFailure);
         Assert.Equal(ErrorType.Conflict, secondFail.Error.Type);
+    }
+
+    [Fact]
+    public void MarkFailed_PreservesOriginalDomainErrorMetadata()
+    {
+        var tx = Transaction.CreatePending(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "UA213223130000026007233566001",
+            100m,
+            "UAH",
+            null,
+            null,
+            Now).Value;
+
+        var sourceError = DomainError.NotFound("Accounts.SourceNotFound", "Source missing.");
+        var result = tx.MarkFailed(sourceError, Now.AddSeconds(1));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(TransactionStatus.Failed, tx.Status);
+        Assert.Equal(sourceError, tx.GetFailureDomainError());
     }
 }
