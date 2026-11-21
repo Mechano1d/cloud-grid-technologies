@@ -5,8 +5,12 @@ using OnlineBanking.IntegrationTests.Infrastructure;
 namespace OnlineBanking.IntegrationTests;
 
 [Collection(BankingApiSuite.Name)]
-public sealed class TransfersTests(BankingApiFactory factory)
+public sealed class TransfersTests(BankingApiFactory factory) : IAsyncLifetime
 {
+    public Task InitializeAsync() => factory.ResetDatabaseAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
     [Fact]
     public async Task CreateTransfer_UpdatesBalancesAtomically_AndRespectsIdempotencyKey()
     {

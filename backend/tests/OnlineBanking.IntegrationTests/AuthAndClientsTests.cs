@@ -1,12 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
+using OnlineBanking.Infrastructure.Auth;
 using OnlineBanking.IntegrationTests.Infrastructure;
+using OnlineBanking.Persistence;
+using OnlineBanking.Persistence.Seeding;
+using OnlineBanking.Shared.Time;
 
 namespace OnlineBanking.IntegrationTests;
 
 [Collection(BankingApiSuite.Name)]
-public sealed class AuthAndClientsTests(BankingApiFactory factory)
+public sealed class AuthAndClientsTests(BankingApiFactory factory) : IAsyncLifetime
 {
+    public Task InitializeAsync() => factory.ResetDatabaseAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
     [Fact]
     public async Task HealthEndpoint_ReturnsHealthyWithoutAuth()
     {
@@ -44,7 +53,7 @@ public sealed class AuthAndClientsTests(BankingApiFactory factory)
     {
         var tag = Guid.NewGuid().ToString("N")[..10];
         var userAuth = await factory.RegisterClientAsync(tag);
-        var adminAuth = await factory.LoginSeededAdminAsync();
+        var adminAuth = await factory.CreateAdminAsync(Guid.NewGuid().ToString("N")[..10]);
 
         using var anonymous = factory.CreateClient();
         using var userClient = factory.CreateAuthorizedClient(userAuth.AccessToken);
@@ -67,7 +76,7 @@ public sealed class AuthAndClientsTests(BankingApiFactory factory)
         var tag = Guid.NewGuid().ToString("N")[..10];
         var userAuth = await factory.RegisterClientAsync(tag);
         var recipientAuth = await factory.RegisterClientAsync(Guid.NewGuid().ToString("N")[..10]);
-        var adminAuth = await factory.LoginSeededAdminAsync();
+        var adminAuth = await factory.CreateAdminAsync(Guid.NewGuid().ToString("N")[..10]);
 
         using var userClient = factory.CreateAuthorizedClient(userAuth.AccessToken);
         using var recipientClient = factory.CreateAuthorizedClient(recipientAuth.AccessToken);
@@ -131,7 +140,7 @@ public sealed class AuthAndClientsTests(BankingApiFactory factory)
     [Fact]
     public async Task BlockSelf_AsAdmin_ReturnsConflict()
     {
-        var adminAuth = await factory.LoginSeededAdminAsync();
+        var adminAuth = await factory.CreateAdminAsync(Guid.NewGuid().ToString("N")[..10]);
         using var adminClient = factory.CreateAuthorizedClient(adminAuth.AccessToken);
 
         var response = await adminClient.PatchAsJsonAsync(
@@ -139,5 +148,54 @@ public sealed class AuthAndClientsTests(BankingApiFactory factory)
             new { status = "Blocked", reason = "Self block test" });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminBootstrapper_CreatesConfiguredAdminOnce_AndSkipsWhenUnconfigured()
+    {
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<OnlineBankingDbContext>();
+            var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasherService>();
+            var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
+
+            var skipped = await AdminBootstrapper.BootstrapAsync(
+                dbContext,
+                new AdminBootstrapOptions(),
+                passwordHasher.Hash,
+                dateTimeProvider);
+            Assert.False(skipped);
+
+            var options = new AdminBootstrapOptions
+            {
+                Email = "ops-admin@example.com",
+                Password = "StrongAdminPassword#2026",
+                TaxId = factory.NextTaxId()
+            };
+
+            var created = await AdminBootstrapper.BootstrapAsync(
+                dbContext,
+                options,
+                passwordHasher.Hash,
+                dateTimeProvider);
+            var duplicate = await AdminBootstrapper.BootstrapAsync(
+                dbContext,
+                options,
+                passwordHasher.Hash,
+                dateTimeProvider);
+
+            Assert.True(created);
+            Assert.False(duplicate);
+        }
+
+        using var client = factory.CreateClient();
+        var loginResponse = await client.PostAsJsonAsync(
+            new Uri("/api/v1/auth/login", UriKind.Relative),
+            new { email = "ops-admin@example.com", password = "StrongAdminPassword#2026" });
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var auth = await loginResponse.Content.ReadFromJsonAsync<AuthPayload>(BankingApiFactory.JsonOptions);
+        Assert.NotNull(auth);
+        Assert.Equal("Admin", auth.Role);
     }
 }
