@@ -13,6 +13,7 @@ public sealed class ResultTests
         Assert.False(result.IsFailure);
         Assert.Equal(42, result.Value);
         Assert.Equal(DomainError.None, result.Error);
+        Assert.Equal(ErrorType.None, result.Error.Type);
     }
 
     [Fact]
@@ -23,6 +24,28 @@ public sealed class ResultTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(error, result.Error);
+        Assert.Equal(ErrorType.Validation, result.Error.Type);
         Assert.Throws<InvalidOperationException>(() => result.Value);
+    }
+
+    [Theory]
+    [InlineData(ErrorType.Validation)]
+    [InlineData(ErrorType.Unauthorized)]
+    [InlineData(ErrorType.Forbidden)]
+    [InlineData(ErrorType.NotFound)]
+    [InlineData(ErrorType.Conflict)]
+    public void DomainError_FactoryHelpers_SetExpectedErrorType(ErrorType expectedType)
+    {
+        DomainError error = expectedType switch
+        {
+            ErrorType.Validation => DomainError.Validation("Test.Validation", "Validation failed."),
+            ErrorType.Unauthorized => DomainError.Unauthorized("Test.Unauthorized", "Unauthorized."),
+            ErrorType.Forbidden => DomainError.Forbidden("Test.Forbidden", "Forbidden."),
+            ErrorType.NotFound => DomainError.NotFound("Test.NotFound", "Not found."),
+            ErrorType.Conflict => DomainError.Conflict("Test.Conflict", "Conflict."),
+            _ => throw new ArgumentOutOfRangeException(nameof(expectedType))
+        };
+
+        Assert.Equal(expectedType, error.Type);
     }
 }

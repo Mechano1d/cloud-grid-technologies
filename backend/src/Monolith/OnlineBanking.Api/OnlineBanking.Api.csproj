@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>3593aa5e-29fb-4a9a-ae5b-da7e15a5709e</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OnlineBanking.Infrastructure\OnlineBanking.Infrastructure.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Persistence\OnlineBanking.Persistence.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Module.Clients\OnlineBanking.Module.Clients.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Module.Accounts\OnlineBanking.Module.Accounts.csproj" />
+    <ProjectReference Include="..\OnlineBanking.Module.Transactions\OnlineBanking.Module.Transactions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,8 +1,15 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Shared/OnlineBanking.Shared/OnlineBanking.Shared.csproj" />
+    <Project Path="src/Monolith/OnlineBanking.Api/OnlineBanking.Api.csproj" />
+    <Project Path="src/Monolith/OnlineBanking.Infrastructure/OnlineBanking.Infrastructure.csproj" />
+    <Project Path="src/Monolith/OnlineBanking.Persistence/OnlineBanking.Persistence.csproj" />
+    <Project Path="src/Monolith/OnlineBanking.Module.Clients/OnlineBanking.Module.Clients.csproj" />
+    <Project Path="src/Monolith/OnlineBanking.Module.Accounts/OnlineBanking.Module.Accounts.csproj" />
+    <Project Path="src/Monolith/OnlineBanking.Module.Transactions/OnlineBanking.Module.Transactions.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/OnlineBanking.UnitTests/OnlineBanking.UnitTests.csproj" />
+    <Project Path="tests/OnlineBanking.IntegrationTests/OnlineBanking.IntegrationTests.csproj" />
   </Folder>
 </Solution>
