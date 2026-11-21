@@ -1,6 +1,87 @@
+using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
+using OnlineBanking.Infrastructure;
+using OnlineBanking.Infrastructure.Auth;
+using OnlineBanking.Infrastructure.Http;
+using OnlineBanking.Module.Accounts;
+using OnlineBanking.Module.Clients;
+using OnlineBanking.Module.Transactions;
+using OnlineBanking.Persistence;
+using OnlineBanking.Persistence.Seeding;
+using OnlineBanking.Shared.Time;
+
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddPersistence(builder.Configuration);
+builder.Services.AddClientsModule();
+builder.Services.AddAccountsModule();
+builder.Services.AddTransactionsModule();
+
+builder.Services
+    .AddControllers()
+    .AddApplicationPart(typeof(ClientsModule).Assembly)
+    .AddApplicationPart(typeof(AccountsModule).Assembly)
+    .AddApplicationPart(typeof(TransactionsModule).Assembly)
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
+    });
+
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddOpenApi();
+
+var allowedOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty)
+    .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+        else
+        {
+            policy.AllowAnyOrigin()
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+    });
+});
+
 var app = builder.Build();
+
+if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<OnlineBankingDbContext>();
+    await dbContext.Database.MigrateAsync();
+
+    if (app.Configuration.GetValue<bool>("Database:SeedOnStartup"))
+    {
+        var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasherService>();
+        var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
+        await DatabaseSeeder.SeedAsync(dbContext, passwordHasher.Hash, dateTimeProvider);
+    }
+}
+
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseCors("Frontend");
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
 
 app.Run();
 
