@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using OnlineBanking.Persistence;
+using OnlineBanking.Persistence.Health;
 using OnlineBanking.Shared.Time;
 
 namespace OnlineBanking.Api.Controllers;
@@ -10,13 +10,13 @@ namespace OnlineBanking.Api.Controllers;
 [AllowAnonymous]
 [Route("health")]
 public sealed class HealthController(
-    OnlineBankingDbContext dbContext,
+    IDatabaseHealthChecker databaseHealthChecker,
     IDateTimeProvider dateTimeProvider) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetHealth(CancellationToken cancellationToken)
     {
-        var canConnect = await dbContext.Database.CanConnectAsync(cancellationToken);
+        var canConnect = await databaseHealthChecker.CanConnectAsync(cancellationToken);
         var payload = new
         {
             status = canConnect ? "Healthy" : "Unhealthy",

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OnlineBanking.Module.Accounts.Application.Abstractions;
 using OnlineBanking.Module.Clients.Application.Abstractions;
 using OnlineBanking.Module.Transactions.Application.Abstractions;
+using OnlineBanking.Persistence.Health;
 using OnlineBanking.Persistence.Repositories;
 
 namespace OnlineBanking.Persistence;
@@ -18,6 +19,7 @@ public static class PersistenceInjection
         services.AddDbContext<OnlineBankingDbContext>(options =>
             options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "public")));
 
+        services.AddScoped<IDatabaseHealthChecker, DatabaseHealthChecker>();
         services.AddScoped<IClientRepository, ClientRepository>();
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
