@@ -93,3 +93,18 @@ dotnet test backend/OnlineBanking.slnx -c Release
 - Shared Lab 1 OpenAPI contract: `docs/openapi/lab1-monolith.yaml`
 - Backend Architecture ADR: `docs/architecture/001-backend-architecture.md`
 - Idempotent SQL DDL: `docs/database/initial-migrations.sql`
+
+## Quick Start (Frontend — React + TypeScript)
+
+Start the backend and PostgreSQL using the steps above. In a second terminal:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://localhost:5173`. To run the static UI in Docker instead, start the
+backend first and run `docker compose -f frontend/docker-compose.yml up --build`
+from the repository root. See [frontend/README.md](frontend/README.md) for
+developer and user instructions, test commands, and API configuration.
