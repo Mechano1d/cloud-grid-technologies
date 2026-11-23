@@ -108,3 +108,44 @@ Open `http://localhost:5173`. To run the static UI in Docker instead, start the
 backend first and run `docker compose -f frontend/docker-compose.yml up --build`
 from the repository root. See [frontend/README.md](frontend/README.md) for
 developer and user instructions, test commands, and API configuration.
+
+
+
+## Cloud Deployment
+
+The Lab 1 application is deployed on Render using separate
+frontend, backend, and database services.
+
+### Deployment Architecture
+
+| Component | Technology | Hosting |
+|---|---|---|
+| Frontend | React 19, TypeScript, Vite | Render Static Site |
+| Backend | ASP.NET Core 10 | Render Web Service (Docker) |
+| Database | PostgreSQL | Render PostgreSQL |
+
+The frontend communicates with the backend through HTTPS REST API
+requests. The backend connects to PostgreSQL using an internal
+database connection.
+
+### Deployment URLs
+
+| Component | URL |
+|---|---|
+| Frontend | [Production Frontend](https://online-banking-frontend-z7xx.onrender.com/) |
+| Backend | [Production API](https://cloud-banking-app.onrender.com/) |
+| API Documentation | [OpenAPI](https://cloud-banking-app.onrender.com/scalar/v1) |
+
+### Deployment Documentation
+
+- [Cloud Deployment Architecture](docs/architecture/003-cloud-deployment-architecture.md)
+
+### Deployment Notes
+
+- Backend is built and deployed using Docker.
+- Frontend is built as a static Vite application.
+- PostgreSQL is hosted separately from the application.
+- Database migrations and optional seed initialization are
+  controlled by backend startup configuration.
+- Production credentials and JWT secrets are stored in
+  Render environment variables and are not committed to Git.
